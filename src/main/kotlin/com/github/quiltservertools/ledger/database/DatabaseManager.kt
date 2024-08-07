@@ -141,8 +141,12 @@ object DatabaseManager {
         }
     }
 
-    suspend fun searchActions(params: ActionSearchParams, page: Int): SearchResults = execute {
-        return@execute selectActionsSearch(params, page)
+    suspend fun searchActions(
+        params: ActionSearchParams,
+        page: Int,
+        pageSize: Int = config[SearchSpec.pageSize]
+    ): SearchResults = execute {
+        return@execute selectActionsSearch(params, page, pageSize)
     }
 
     suspend fun countActions(params: ActionSearchParams): Long = execute {
@@ -448,7 +452,11 @@ object DatabaseManager {
         }
     }
 
-    private fun Transaction.selectActionsSearch(params: ActionSearchParams, page: Int): SearchResults {
+    private fun Transaction.selectActionsSearch(
+        params: ActionSearchParams,
+        page: Int,
+        pageSize: Int = config[SearchSpec.pageSize]
+    ): SearchResults {
         val actions = mutableListOf<ActionType>()
         var totalActions: Long
 
@@ -470,22 +478,16 @@ object DatabaseManager {
         if (totalActions == 0L) return SearchResults(actions, params, page, 0)
 
         query = query.orderBy(Tables.Actions.id, SortOrder.DESC)
-        if (page < 0) {
-            // if page < 0, return all results once without pagination
-            actions.addAll(getActionsFromQuery(query))
-            return SearchResults(actions, params, 1, 1)
-        } else {
-            query = query.limit(
-                config[SearchSpec.pageSize],
-                (config[SearchSpec.pageSize] * (page - 1)).toLong()
-            ) // TODO better pagination without offset - probably doesn't matter as most people stay on first few pages
+        query = query.limit(
+            pageSize,
+            (pageSize * (page - 1)).toLong()
+        ) // TODO better pagination without offset - probably doesn't matter as most people stay on first few pages
 
-            actions.addAll(getActionsFromQuery(query))
+        actions.addAll(getActionsFromQuery(query))
 
-            val totalPages = ceil(totalActions.toDouble() / config[SearchSpec.pageSize].toDouble()).toInt()
+        val totalPages = ceil(totalActions.toDouble() / pageSize.toDouble()).toInt()
 
-            return SearchResults(actions, params, page, totalPages)
-        }
+        return SearchResults(actions, params, page, totalPages)
     }
 
     private fun Transaction.countActions(params: ActionSearchParams): Long = Tables.Actions
